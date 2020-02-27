@@ -264,11 +264,11 @@ fu! s:InternalBuffer.ClearBuffer(buf) dict abort
 endfu
 
 fu! s:InternalBuffer.StartUiTransaction(buf) dict abort
-  call nvim_buf_set_option(a:buf, 'modifiable', v:true)
+  call setbufvar(a:buf, '&modifiable', 1)
 endfu
 
 fu! s:InternalBuffer.EndUiTransaction(buf) dict abort
-  call nvim_buf_set_option(a:buf, 'modifiable', v:false)
+  call setbufvar(a:buf, '&modifiable', 0)
 endfu
 
 fu! s:InternalBuffer.GrepResultToItems(gr, current_idx, layer) dict abort
