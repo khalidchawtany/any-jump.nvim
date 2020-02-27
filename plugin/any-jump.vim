@@ -22,6 +22,8 @@
 " - add "save search" button
 " - saved searches list
 
+let s:nvim = has('nvim')
+
 " === Plugin options ===
 
 fu! s:set_plugin_global_option(option_name, default_value) abort
@@ -80,6 +82,14 @@ call s:set_plugin_global_option('any_jump_disable_default_keybindings', v:false)
 " ----------------------------------------------
 
 fu! s:CreateUi(internal_buffer) abort
+  if s:nvim
+    call s:CreateNvimUi(a:internal_buffer)
+  else
+    call s:CreateVimUi(a:internal_buffer)
+  endif
+endfu
+
+fu! s:CreateNvimUi(internal_buffer) abort
   let kw  = a:internal_buffer.keyword
   let buf = bufadd('any-jump lookup ' . kw)
 
@@ -104,8 +114,19 @@ fu! s:CreateUi(internal_buffer) abort
   call nvim_open_win(buf, v:true, opts)
 
   let b:ui = a:internal_buffer
+  let a:internal_buffer.vim_bufnr = winbufnr(buf)
+
   call b:ui.RenderUi()
   call b:ui.JumpToFirstOfType('link', 'definitions')
+endfu
+
+fu! s:CreateVimUi(internal_buffer) abort
+  let winid = popup_menu([], {"cursorline": 1, "minwidth": 100, "minheight": 20, "maxheight": 30, "border": [0,0,0,0], "padding": [0,1,1,1], "mapping": 1, "filtermode": 'n'})
+
+  let b:ui = a:internal_buffer
+  let a:internal_buffer.vim_bufnr = winbufnr(winid)
+
+  call b:ui.RenderUi()
 endfu
 
 fu! s:Jump() abort

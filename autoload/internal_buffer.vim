@@ -12,6 +12,9 @@
 "   { ... },
 "   ...
 " ]
+
+let s:nvim = has('nvim')
+
 let s:InternalBuffer = {}
 
 let s:InternalBuffer.MethodsList = [
@@ -39,6 +42,7 @@ let s:InternalBuffer.MethodsList = [
 " Produce new Render Buffer
 fu! s:InternalBuffer.New() abort
   let object = {
+        \"vim_bufnr":                0,
         \"items":                    [],
         \"gc":                       v:false,
         \"preview_opened":           v:false,
@@ -61,7 +65,12 @@ fu! s:InternalBuffer.len() dict abort
 endfu
 
 fu! s:InternalBuffer.RenderLine(items, line) dict abort
-  let base_prefix = "\t"
+  if s:nvim
+    let base_prefix = "\t"
+  else
+    let base_prefix = ""
+  endif
+
   let text        = base_prefix
   let hl_regions  = []
 
@@ -79,17 +88,22 @@ fu! s:InternalBuffer.RenderLine(items, line) dict abort
     call add(hl_regions, [item.hl_group, hl_from, hl_to])
   endfor
 
-  call appendbufline(bufnr(), a:line, text)
+  call appendbufline(self.vim_bufnr, a:line, text)
 
-  for region in hl_regions
-    call nvim_buf_add_highlight(
-          \bufnr(),
-          \-1,
-          \region[0],
-          \a:line,
-          \region[1],
-          \region[2])
-  endfor
+  if s:nvim
+    for region in hl_regions
+      call nvim_buf_add_highlight(
+            \self.vim_bufnr,
+            \-1,
+            \region[0],
+            \a:line,
+            \region[1],
+            \region[2])
+    endfor
+  else
+    " call prop_type_add('title', {'highlight': 'Function'})
+    " call prop_add(1, 1, {'length': 3, 'type': 'title'})
+  endif
 endfu
 
 fu! s:InternalBuffer.AddLine(items) dict abort
