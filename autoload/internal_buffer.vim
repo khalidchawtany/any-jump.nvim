@@ -52,6 +52,7 @@ fu! s:InternalBuffer.New() abort
         \"usages_grep_results":      [],
         \"vim_bufnr":                0,
         \"popup_winid":              0,
+        \"previous_bufnr":           0,
         \}
 
   for method in self.MethodsList
@@ -428,7 +429,7 @@ fu! s:InternalBuffer.RenderUiUsagesList(grep_results, start_ln) dict abort
       endfor
 
       if path_idx != len(keys(render_map)) - 1
-        call self.AddLineAt([ self.CreateItem("text", "", 0, -1, "Comment") ], start_ln)
+        call self.AddLineAt([ self.CreateItem("text", "", 0, -1, "Comment", {"layer": "usages"}) ], start_ln)
 
         let start_ln += 1
       endif
@@ -446,10 +447,10 @@ fu! s:InternalBuffer.RenderUiUsagesList(grep_results, start_ln) dict abort
   endif
 
   if hidden_count > 0
-    call self.AddLineAt([ self.CreateItem("text", "", 0, -1, "Comment") ], start_ln)
+    call self.AddLineAt([ self.CreateItem("text", "", 0, -1, "Comment", {"layer": "usages"}) ], start_ln)
     let start_ln += 1
 
-    call self.AddLineAt([ self.CreateItem("more_button", '[ + ' . hidden_count . ' more ]', 0, -1, "Function") ], start_ln)
+    call self.AddLineAt([ self.CreateItem("more_button", '[ + ' . hidden_count . ' more ]', 0, -1, "Function", {"layer": "usages"}) ], start_ln)
     let start_ln += 1
   endif
 
@@ -555,7 +556,7 @@ fu! s:InternalBuffer.RenderUi() dict abort
 
   call self.AddLine([ self.CreateItem("text", "", 0, -1, "Comment") ])
 
-  if len(self.usages_grep_results) > 0
+  if self.usages_opened && len(self.usages_grep_results) > 0
     let current_ln = self.len()
     call self.RenderUiUsagesList(self.usages_grep_results, self.len())
   endif

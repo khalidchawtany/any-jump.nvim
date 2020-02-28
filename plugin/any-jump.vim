@@ -113,12 +113,10 @@ fu! s:CreateNvimUi(internal_buffer) abort
 
   call nvim_open_win(buf, v:true, opts)
 
-  let b:ui = a:internal_buffer
+  let t:any_jump.vim_bufnr = buf
 
-  let a:internal_buffer.vim_bufnr = buf
-
-  call a:internal_buffer.RenderUi()
-  call a:internal_buffer.JumpToFirstOfType('link', 'definitions')
+  call t:any_jump.RenderUi()
+  call t:any_jump.JumpToFirstOfType('link', 'definitions')
 endfu
 
 fu! s:CreateVimUi(internal_buffer) abort
@@ -138,49 +136,34 @@ fu! s:CreateVimUi(internal_buffer) abort
         \"callback":   Callback,
         \})
 
-  " bufwinid
-
-  " let a:internal_buffer.vim_bufnr   = winbufnr(popup_winid)
   let a:internal_buffer.popup_winid = popup_winid
   let a:internal_buffer.vim_bufnr   = winbufnr(popup_winid)
-
-  echo "bufnr -> " . a:internal_buffer.vim_bufnr . '  popup winid -> ' . a:internal_buffer.popup_winid
-
-  " store internal buffer link inside popup window buffer
-  " for filter context primarly
-  call setbufvar(a:internal_buffer.vim_bufnr, "ui", a:internal_buffer)
 
   call a:internal_buffer.RenderUi()
 endfu
 
 fu! s:VimPopupFilter(popup_winid, key) abort
   let bufnr = winbufnr(a:popup_winid)
-  let ib    = getbufvar(bufnr, 'ui')
-
-  if type(ib) != v:t_dict
-    return 0
-  endif
-
-  echo "filter -> popupwinid-vim: " . a:popup_winid . ' winbufnr' . bufnr
+  let ib    = s:GetCurrentInternalBuffer2()
 
   if a:key == "j" || a:key == "k"
     call popup_filter_menu(a:popup_winid, a:key)
     return 1
 
   elseif a:key == "p" || a:key == "\<TAB>"
-    call g:AnyJumpHandlePreview(ib)
+    call g:AnyJumpHandlePreview()
     return 1
 
   elseif a:key == "a" || a:key == "A"
-    call g:AnyJumpToggleAllResults(ib)
+    call g:AnyJumpToggleAllResults()
     return 1
 
   elseif a:key == "u" || a:key == "U"
-    call g:AnyJumpHandleUsages(ib)
+    call g:AnyJumpHandleUsages()
     return 1
 
   elseif a:key == "T"
-    call g:AnyJumpToggleGrouping(ib)
+    call g:AnyJumpToggleGrouping()
     return 1
 
   elseif a:key == "\<CR>"
@@ -188,7 +171,7 @@ fu! s:VimPopupFilter(popup_winid, key) abort
     return 1
 
   elseif a:key == "q" || a:key == '\<ESC>' ||  a:key == 'Q'
-    call g:AnyJumpHandleClose(ib)
+    call g:AnyJumpHandleClose()
     return 1
   endif
 
@@ -201,23 +184,12 @@ fu! s:VimPopupCallback(id, result) abort
   echo "id/result -> " . a:id . ' ' . string(a:result)
 endfu
 
-" optional:
-fu! s:GetCurrentInternalBuffer(...) abort
-  " second condition is for empty lists check (a:0 == 1 && a:000 == [[]])
-  if a:0 == 0 || (a:0 == 1 && a:1 == [])
-    if exists('b:ui')
-      let ui = b:ui
-    endif
-  else
-    if type(a:1) == v:t_list
-      let ui = a:1[0]
-    end
-  endif
 
-  if type(ui) == v:t_dict
-    return ui
+fu! s:GetCurrentInternalBuffer2() abort
+  if exists('t:any_jump')
+    return t:any_jump
   else
-    throw "any-jump InternalBuffer not found"
+    throw "any-jump internal buffer lost"
   endif
 endfu
 
@@ -228,10 +200,8 @@ fu! s:Jump() abort
     return
   endif
 
-  let keyword  = ''
-
+  let keyword    = ''
   let cur_mode   = mode()
-  let cur_win_id = win_findbuf(bufnr())[0]
 
   if cur_mode == 'n'
     let keyword = expand('<cword>')
@@ -246,11 +216,11 @@ fu! s:Jump() abort
   endif
 
   let grep_results = search#SearchDefinitions(&l:filetype, keyword)
+  let ib           = internal_buffer#GetClass().New()
 
-  let ib = internal_buffer#GetClass().New()
   let ib.keyword                  = keyword
   let ib.language                 = &l:filetype
-  let ib.source_win_id            = cur_win_id
+  let ib.source_win_id            = winnr()
   let ib.grouping_enabled         = g:any_jump_grouping_enabled
   let ib.definitions_grep_results = grep_results
 
@@ -260,25 +230,24 @@ fu! s:Jump() abort
     let ib.usages_grep_results = usages_grep_results
   endif
 
-  let w:any_jump_last_ib = ib
+  " assign any-jump internal buffer to current tab
+  let t:any_jump = ib
+
   call s:CreateUi(ib)
 endfu
 
 fu! s:JumpBack() abort
-  if exists('w:any_jump_prev_buf_id')
-    let new_prev_buf_id = winbufnr(winnr())
-
-    execute ":buf " . w:any_jump_prev_buf_id
-    let w:any_jump_prev_buf_id = new_prev_buf_id
+  if exists('t:any_jump') && t:any_jump.previous_bufnr
+    let new_previous = bufnr()
+    execute(':buf ' . t:any_jump.previous_bufnr)
+    let t:any_jump.previous_bufnr = new_previous
   endif
 endfu
 
 fu! s:JumpLastResults() abort
-  if exists('w:any_jump_last_ib')
-    let cur_win_id = win_findbuf(bufnr())[0]
-    let w:any_jump_last_ib.source_win_id = cur_win_id
-
-    call s:CreateUi(w:any_jump_last_ib)
+  if exists('t:any_jump') " TODO: check for buffer visibility here
+    let t:any_jump.source_win_id = winnr()
+    call s:CreateUi(t:any_jump)
   endif
 endfu
 
@@ -287,11 +256,9 @@ endfu
 " ----------------------------------------------
 
 fu! g:AnyJumpHandleOpen() abort
-  if exists('b:ui') && type(b:ui) != v:t_dict
-    return
-  endif
+  let ui = s:GetCurrentInternalBuffer2()
+  let action_item = ui.GetItemByPos()
 
-  let action_item = b:ui.GetItemByPos()
   if type(action_item) != v:t_dict
     return 0
   endif
@@ -302,19 +269,20 @@ fu! g:AnyJumpHandleOpen() abort
   endif
 
   if action_item.type == 'link'
-    if has_key(b:ui, 'source_win_id') && type(b:ui.source_win_id) == v:t_number
-      let win_id = b:ui.source_win_id
+    if has_key(ui, 'source_win_id') && type(ui.source_win_id) == v:t_number
+      let win_id = ui.source_win_id
 
       " close buffer
       " THINK: TODO: buffer remove options/behaviour?
       close!
 
-      " jump to definition
+      " jump to desired window
       call win_gotoid(win_id)
 
-      let buf_id = winbufnr(winnr())
-      let w:any_jump_prev_buf_id = buf_id
+      " save opened buffer for back-history
+      let ui.previous_bufnr = bufnr()
 
+      " open new file
       execute "edit " . action_item.data.path . '|:' . string(action_item.data.line_number)
     endif
   elseif action_item.type == 'more_button'
@@ -323,9 +291,7 @@ fu! g:AnyJumpHandleOpen() abort
 endfu
 
 fu! g:AnyJumpHandleClose(...) abort
-  let ui = s:GetCurrentInternalBuffer(a:000)
-
-  echo "close popup bufnr -> " . ui.vim_bufnr . ' winid ->' . ui.popup_winid
+  let ui = s:GetCurrentInternalBuffer2()
 
   if s:nvim
     close!
@@ -335,11 +301,7 @@ fu! g:AnyJumpHandleClose(...) abort
 endfu
 
 fu! g:AnyJumpHandleUsages(...) abort
-  let ui = s:GetCurrentInternalBuffer(a:000)
-
-  if !has_key(ui, 'keyword') || !has_key(ui, 'language')
-    return
-  endif
+  let ui = s:GetCurrentInternalBuffer2()
 
   " close current opened usages
   " TODO: move to method
@@ -350,7 +312,8 @@ fu! g:AnyJumpHandleUsages(...) abort
     let layer_start_ln = 0
     let usages_started = v:false
 
-    call ui.StartUiTransaction(bufnr())
+    call ui.StartUiTransaction(ui.vim_bufnr)
+
     for line in ui.items
       if has_key(line[0], 'data') && type(line[0].data) == v:t_dict
             \ && has_key(line[0].data, 'layer')
@@ -364,12 +327,12 @@ fu! g:AnyJumpHandleUsages(...) abort
         endif
 
         " remove from ui
-        call deletebufline(bufnr(), layer_start_ln)
+        call deletebufline(ui.vim_bufnr, layer_start_ln)
 
       " remove preview lines for usages
       elseif usages_started && line[0].type == 'preview_text'
         let line[0].gc = v:true
-        call deletebufline(bufnr(), layer_start_ln)
+        call deletebufline(ui.vim_bufnr, layer_start_ln)
       else
         let layer_start_ln = 0
       endif
@@ -377,7 +340,7 @@ fu! g:AnyJumpHandleUsages(...) abort
       let idx += 1
     endfor
 
-    call ui.EndUiTransaction(bufnr())
+    call ui.EndUiTransaction(ui.vim_bufnr)
     call ui.RemoveGarbagedLines()
 
     call ui.JumpToFirstOfType('link', 'definitions')
@@ -413,7 +376,7 @@ fu! g:AnyJumpHandleUsages(...) abort
 endfu
 
 fu! g:AnyJumpToFirstLink(...) abort
-  let ui = s:GetCurrentInternalBuffer(a:000)
+  let ui = s:GetCurrentInternalBuffer2()
 
   call ui.JumpToFirstOfType('link')
 
@@ -421,7 +384,7 @@ fu! g:AnyJumpToFirstLink(...) abort
 endfu
 
 fu! g:AnyJumpToggleGrouping(...) abort
-  let ui = s:GetCurrentInternalBuffer(a:000)
+  let ui = s:GetCurrentInternalBuffer2()
 
   let cursor_item = ui.TryFindOriginalLinkFromPos()
 
@@ -438,7 +401,7 @@ fu! g:AnyJumpToggleGrouping(...) abort
 endfu
 
 fu! g:AnyJumpToggleAllResults(...) abort
-  let ui = s:GetCurrentInternalBuffer(a:000)
+  let ui = s:GetCurrentInternalBuffer2()
 
   let ui.overmaxed_results_hidden =
         \ ui.overmaxed_results_hidden ? v:false : v:true
@@ -458,7 +421,7 @@ fu! g:AnyJumpToggleAllResults(...) abort
 endfu
 
 fu! g:AnyJumpHandlePreview(...) abort
-  let ui = s:GetCurrentInternalBuffer(a:000)
+  let ui = s:GetCurrentInternalBuffer2()
 
   call ui.StartUiTransaction(ui.vim_bufnr)
 
