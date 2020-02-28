@@ -114,7 +114,7 @@ fu! s:CreateNvimUi(internal_buffer) abort
   call nvim_open_win(buf, v:true, opts)
 
   let b:ui = a:internal_buffer
-  let a:internal_buffer.vim_bufnr = winbufnr(buf)
+  let a:internal_buffer.vim_bufnr = buf
 
   call b:ui.RenderUi()
   call b:ui.JumpToFirstOfType('link', 'definitions')

@@ -157,7 +157,7 @@ endfu
 
 
 fu! s:InternalBuffer.GetItemByPos() dict abort
-  let idx = line('.') - 1
+  let idx = getbufinfo(self.vim_bufnr)[0]['lnum'] - 1
 
   if len(self.items) == idx
     return 0
