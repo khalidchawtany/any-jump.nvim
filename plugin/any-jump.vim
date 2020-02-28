@@ -273,7 +273,7 @@ fu! g:AnyJumpHandleOpen() abort
   endif
 
   if action_item.type == 'link'
-    if has_key(ui, 'source_win_id') && type(ui.source_win_id) == v:t_number
+    if type(ui.source_win_id) == v:t_number
       let win_id = ui.source_win_id
 
       if s:nvim
