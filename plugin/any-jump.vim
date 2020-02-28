@@ -144,7 +144,7 @@ endfu
 
 fu! s:VimPopupFilter(popup_winid, key) abort
   let bufnr = winbufnr(a:popup_winid)
-  let ib    = s:GetCurrentInternalBuffer2()
+  let ib    = s:GetCurrentInternalBuffer()
 
   if a:key == "j" || a:key == "k"
     call popup_filter_menu(a:popup_winid, a:key)
@@ -166,17 +166,21 @@ fu! s:VimPopupFilter(popup_winid, key) abort
     call g:AnyJumpToggleGrouping()
     return 1
 
-  elseif a:key == "\<CR>"
-    call popup_filter_menu(a:popup_winid, a:key)
-    return 1
+  elseif a:key == "\<CR>" || a:key == 'o' || a:key == 'O'
+    let item = t:any_jump.TryFindOriginalLinkFromPos()
+
+    if type(item) == v:t_dict
+      call g:AnyJumpHandleOpen()
+      return 1
+    else
+      return 1
+    endif
 
   elseif a:key == "q" || a:key == '\<ESC>' ||  a:key == 'Q'
     call g:AnyJumpHandleClose()
     return 1
   endif
 
-  " echo popup_getoptions(b:popup_winid)
-  " call popup_close(b:popup_winid)
   return 0
 endfu
 
@@ -185,7 +189,7 @@ fu! s:VimPopupCallback(id, result) abort
 endfu
 
 
-fu! s:GetCurrentInternalBuffer2() abort
+fu! s:GetCurrentInternalBuffer() abort
   if exists('t:any_jump')
     return t:any_jump
   else
@@ -256,7 +260,7 @@ endfu
 " ----------------------------------------------
 
 fu! g:AnyJumpHandleOpen() abort
-  let ui = s:GetCurrentInternalBuffer2()
+  let ui = s:GetCurrentInternalBuffer()
   let action_item = ui.GetItemByPos()
 
   if type(action_item) != v:t_dict
@@ -272,9 +276,11 @@ fu! g:AnyJumpHandleOpen() abort
     if has_key(ui, 'source_win_id') && type(ui.source_win_id) == v:t_number
       let win_id = ui.source_win_id
 
-      " close buffer
-      " THINK: TODO: buffer remove options/behaviour?
-      close!
+      if s:nvim
+        close!
+      else
+        call popup_close(ui.popup_winid)
+      endif
 
       " jump to desired window
       call win_gotoid(win_id)
@@ -291,7 +297,7 @@ fu! g:AnyJumpHandleOpen() abort
 endfu
 
 fu! g:AnyJumpHandleClose(...) abort
-  let ui = s:GetCurrentInternalBuffer2()
+  let ui = s:GetCurrentInternalBuffer()
 
   if s:nvim
     close!
@@ -301,7 +307,7 @@ fu! g:AnyJumpHandleClose(...) abort
 endfu
 
 fu! g:AnyJumpHandleUsages(...) abort
-  let ui = s:GetCurrentInternalBuffer2()
+  let ui = s:GetCurrentInternalBuffer()
 
   " close current opened usages
   " TODO: move to method
@@ -376,7 +382,7 @@ fu! g:AnyJumpHandleUsages(...) abort
 endfu
 
 fu! g:AnyJumpToFirstLink(...) abort
-  let ui = s:GetCurrentInternalBuffer2()
+  let ui = s:GetCurrentInternalBuffer()
 
   call ui.JumpToFirstOfType('link')
 
@@ -384,7 +390,7 @@ fu! g:AnyJumpToFirstLink(...) abort
 endfu
 
 fu! g:AnyJumpToggleGrouping(...) abort
-  let ui = s:GetCurrentInternalBuffer2()
+  let ui = s:GetCurrentInternalBuffer()
 
   let cursor_item = ui.TryFindOriginalLinkFromPos()
 
@@ -401,7 +407,7 @@ fu! g:AnyJumpToggleGrouping(...) abort
 endfu
 
 fu! g:AnyJumpToggleAllResults(...) abort
-  let ui = s:GetCurrentInternalBuffer2()
+  let ui = s:GetCurrentInternalBuffer()
 
   let ui.overmaxed_results_hidden =
         \ ui.overmaxed_results_hidden ? v:false : v:true
@@ -421,7 +427,7 @@ fu! g:AnyJumpToggleAllResults(...) abort
 endfu
 
 fu! g:AnyJumpHandlePreview(...) abort
-  let ui = s:GetCurrentInternalBuffer2()
+  let ui = s:GetCurrentInternalBuffer()
 
   call ui.StartUiTransaction(ui.vim_bufnr)
 
