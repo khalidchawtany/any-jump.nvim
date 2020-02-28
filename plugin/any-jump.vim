@@ -138,8 +138,13 @@ fu! s:CreateVimUi(internal_buffer) abort
         \"callback":   Callback,
         \})
 
-  let a:internal_buffer.vim_bufnr   = winbufnr(popup_winid)
+  " bufwinid
+
+  " let a:internal_buffer.vim_bufnr   = winbufnr(popup_winid)
   let a:internal_buffer.popup_winid = popup_winid
+  let a:internal_buffer.vim_bufnr   = winbufnr(popup_winid)
+
+  echo "bufnr -> " . a:internal_buffer.vim_bufnr . '  popup winid -> ' . a:internal_buffer.popup_winid
 
   " store internal buffer link inside popup window buffer
   " for filter context primarly
@@ -155,6 +160,8 @@ fu! s:VimPopupFilter(popup_winid, key) abort
   if type(ib) != v:t_dict
     return 0
   endif
+
+  echo "filter -> popupwinid-vim: " . a:popup_winid . ' winbufnr' . bufnr
 
   if a:key == "j" || a:key == "k"
     call popup_filter_menu(a:popup_winid, a:key)
@@ -180,8 +187,8 @@ fu! s:VimPopupFilter(popup_winid, key) abort
     call popup_filter_menu(a:popup_winid, a:key)
     return 1
 
-  elseif a:key == "q"
-    call popup_close(a:popup_winid)
+  elseif a:key == "q" || a:key == '\<ESC>' ||  a:key == 'Q'
+    call g:AnyJumpHandleClose(ib)
     return 1
   endif
 
@@ -194,8 +201,9 @@ fu! s:VimPopupCallback(id, result) abort
   echo "id/result -> " . a:id . ' ' . string(a:result)
 endfu
 
+" optional:
 fu! s:GetCurrentInternalBuffer(...) abort
-  " second condition is for check (a:0 == 1 && a:000 == [[]])
+  " second condition is for empty lists check (a:0 == 1 && a:000 == [[]])
   if a:0 == 0 || (a:0 == 1 && a:1 == [])
     if exists('b:ui')
       let ui = b:ui
@@ -314,9 +322,15 @@ fu! g:AnyJumpHandleOpen() abort
   endif
 endfu
 
-fu! g:AnyJumpHandleClose() abort
-  if exists('b:ui')
+fu! g:AnyJumpHandleClose(...) abort
+  let ui = s:GetCurrentInternalBuffer(a:000)
+
+  echo "close popup bufnr -> " . ui.vim_bufnr . ' winid ->' . ui.popup_winid
+
+  if s:nvim
     close!
+  else
+    call popup_close(ui.popup_winid)
   endif
 endfu
 
@@ -337,7 +351,6 @@ fu! g:AnyJumpHandleUsages(...) abort
     let usages_started = v:false
 
     call ui.StartUiTransaction(bufnr())
-
     for line in ui.items
       if has_key(line[0], 'data') && type(line[0].data) == v:t_dict
             \ && has_key(line[0].data, 'layer')
