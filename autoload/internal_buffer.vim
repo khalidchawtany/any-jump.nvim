@@ -178,7 +178,7 @@ fu! s:InternalBuffer.GetItemByPos() dict abort
     let column = 1
   end
 
-  let line   = self.items[idx]
+  let line = self.items[idx]
 
   for item in line
     if item.start_col <= column && (item.end_col >= column || item.end_col == -1 )
