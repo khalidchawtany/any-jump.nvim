@@ -79,21 +79,22 @@ fu! s:InternalBuffer.RenderLine(items, line) dict abort
   for item in a:items
     let prefix = ""
 
-    if item.start_col > 0
-      let prefix = repeat(" ", item.start_col)
+    if item.start_col > 1
+      let prefix = " "
     endif
 
-    let hl_from = item.start_col + len(text)
-    let hl_to   = hl_from + len(prefix . item.text)
-    let text    = text . prefix . item.text
+    let text = text . prefix . item.text
 
-    call add(hl_regions, [item.hl_group, hl_from, hl_to])
+    let hl_from = item.start_col
+    let hl_to   = hl_from + len(prefix . item.text)
+
+    call add(hl_regions, [item.hl_group, hl_from, hl_to, len(prefix . item.text)])
   endfor
 
   call appendbufline(self.vim_bufnr, a:line, text)
 
-  if s:nvim
-    for region in hl_regions
+  for region in hl_regions
+    if s:nvim
       call nvim_buf_add_highlight(
             \self.vim_bufnr,
             \-1,
@@ -101,16 +102,26 @@ fu! s:InternalBuffer.RenderLine(items, line) dict abort
             \a:line,
             \region[1],
             \region[2])
-    endfor
-  else
-    " call prop_type_add('title', {'highlight': 'Function'})
-    " call prop_add(1, 1, {'length': 3, 'type': 'title'})
-  endif
+    else
+      " echo string(a:line + 1) . ' ' . string(region[1])
+      call prop_add(a:line + 1, region[1], {
+            \'length': region[3],
+            \'type': region[0],
+            \'bufnr': self.vim_bufnr})
+    endif
+  endfor
 endfu
 
 fu! s:InternalBuffer.AddLine(items) dict abort
   if type(a:items) == v:t_list
     let current_len = self.len()
+    let l:last_col = 1
+
+    for item in a:items
+      let item.start_col = l:last_col
+      let item.end_col   = l:last_col + item.len
+      let l:last_col     = item.end_col
+    endfor
 
     call self.RenderLine(a:items, current_len)
     call add(self.items, a:items)
@@ -125,6 +136,14 @@ endfu
 
 fu! s:InternalBuffer.AddLineAt(items, line_number) dict abort
   if type(a:items) == v:t_list
+    let last_col = 1
+
+    for item in a:items
+      let item.start_col = last_col
+      let item.end_col   = l:last_col + item.len
+      let last_col       = item.end_col
+    endfor
+
     call self.RenderLine(a:items, a:line_number)
     call insert(self.items, a:items, a:line_number)
 
@@ -138,22 +157,34 @@ endfu
 
 " type:
 "   'text' / 'link' / 'button' / 'preview_text'
-fu! s:InternalBuffer.CreateItem(type, text, start_col, end_col, hl_group, ...) dict abort
-  let data = 0
+fu! s:InternalBuffer.CreateItem(type, text, hl_group, ...) dict abort
+  let data = {}
 
-  if a:0 > 0
+  if a:0
     let data = a:1
   endif
 
   let item = {
         \"type":      a:type,
         \"text":      a:text,
-        \"start_col": a:start_col,
-        \"end_col":   a:end_col,
+        \"len":       len(a:text),
+        \"start_col": 0,
+        \"end_col":   0,
         \"hl_group":  a:hl_group,
-        \"gc":        0,
+        \"gc":        v:false,
         \"data":      data
         \}
+
+  " TODO: optimize this part for rednering perfomance
+  if !s:nvim
+    if prop_type_get(item.hl_group, {'bufnr': self.vim_bufnr}) == {}
+      call prop_type_add(item.hl_group, {
+            \'highlight': item.hl_group,
+            \'bufnr': self.vim_bufnr
+            \})
+    endif
+  endif
+
   return item
 endfu
 
@@ -323,19 +354,19 @@ fu! s:InternalBuffer.GrepResultToItems(gr, current_idx, layer) dict abort
     let prefix_text = a:current_idx + 1 . " "
   endif
 
-  let prefix = self.CreateItem("link", prefix_text, 0, -1, "Comment", options)
+  let prefix = self.CreateItem("link", prefix_text, "Comment", options)
 
   if g:any_jump_results_ui_style == 'filename_first'
-    let path_text    = ' ' .  gr.path .  ":" . gr.line_number
-    let matched_text = self.CreateItem("link", gr.text, 0, -1, "Statement", original_link_options)
-    let file_path    = self.CreateItem("link", path_text, 0, -1, "String", options)
+    let path_text    = '' .  gr.path .  ":" . gr.line_number
+    let matched_text = self.CreateItem("link", gr.text, "Statement", original_link_options)
+    let file_path    = self.CreateItem("link", path_text, "String", options)
 
     let items = [ prefix, matched_text, file_path ]
 
   elseif g:any_jump_results_ui_style == 'filename_last'
     let path_text    = gr.path .  ":" . gr.line_number
-    let matched_text = self.CreateItem("link", " " . gr.text, 0, -1, "Statement", original_link_options)
-    let file_path    = self.CreateItem("link", path_text, 0, -1, "String", options)
+    let matched_text = self.CreateItem("link", " " . gr.text, "Statement", original_link_options)
+    let file_path    = self.CreateItem("link", path_text, "String", options)
 
     let items = [ prefix, file_path, matched_text ]
   endif
@@ -358,8 +389,8 @@ fu! s:InternalBuffer.GrepResultToGroupedItems(gr, current_idx, layer) dict abort
     let prefix_text = a:current_idx + 1 . " "
   endif
 
-  let prefix       = self.CreateItem("link", prefix_text, 0, -1, "Comment", options)
-  let matched_text = self.CreateItem("link", gr.text, 0, -1, "Statement", original_link_options)
+  let prefix       = self.CreateItem("link", prefix_text, "Comment", options)
+  let matched_text = self.CreateItem("link", gr.text, "Statement", original_link_options)
   let items        = [ prefix, matched_text ]
 
   return items
@@ -380,14 +411,14 @@ fu! s:InternalBuffer.RenderUiUsagesList(grep_results, start_ln) dict abort
   endif
 
   call self.AddLineAt([
-    \self.CreateItem("text", ">", 0, 2, "Function", {'layer': 'usages'}),
-    \self.CreateItem("text", self.keyword, 1, -1, "Identifier", {'layer': 'usages'}),
-    \self.CreateItem("text", "usages", 1, -1, "Function", {'layer': 'usages'}),
+    \self.CreateItem("text", ">", "Function", {'layer': 'usages'}),
+    \self.CreateItem("text", self.keyword, "Identifier", {'layer': 'usages'}),
+    \self.CreateItem("text", "usages", "Function", {'layer': 'usages'}),
     \], start_ln)
 
   let start_ln += 1
 
-  call self.AddLineAt([ self.CreateItem("text", "", 0, -1, "Comment", {"layer": "usages"}) ], start_ln)
+  call self.AddLineAt([ self.CreateItem("text", "", "Comment", {"layer": "usages"}) ], start_ln)
   let start_ln += 1
 
   let idx = 0
@@ -413,8 +444,8 @@ fu! s:InternalBuffer.RenderUiUsagesList(grep_results, start_ln) dict abort
             \"group_header": v:true,
             \}
 
-      let prefix     = self.CreateItem("link", ">", 0, -1, "Comment", opts)
-      let group_name = self.CreateItem("link", path, 1, -1, "Function", opts)
+      let prefix     = self.CreateItem("link", ">", "Comment", opts)
+      let group_name = self.CreateItem("link", path,  "Function", opts)
       let line       = [ prefix, group_name ]
 
       call self.AddLineAt(line, start_ln)
@@ -429,7 +460,7 @@ fu! s:InternalBuffer.RenderUiUsagesList(grep_results, start_ln) dict abort
       endfor
 
       if path_idx != len(keys(render_map)) - 1
-        call self.AddLineAt([ self.CreateItem("text", "", 0, -1, "Comment", {"layer": "usages"}) ], start_ln)
+        call self.AddLineAt([ self.CreateItem("text", "", "Comment", {"layer": "usages"}) ], start_ln)
 
         let start_ln += 1
       endif
@@ -447,14 +478,14 @@ fu! s:InternalBuffer.RenderUiUsagesList(grep_results, start_ln) dict abort
   endif
 
   if hidden_count > 0
-    call self.AddLineAt([ self.CreateItem("text", "", 0, -1, "Comment", {"layer": "usages"}) ], start_ln)
+    call self.AddLineAt([ self.CreateItem("text", "", "Comment", {"layer": "usages"}) ], start_ln)
     let start_ln += 1
 
-    call self.AddLineAt([ self.CreateItem("more_button", '[ + ' . hidden_count . ' more ]', 0, -1, "Function", {"layer": "usages"}) ], start_ln)
+    call self.AddLineAt([ self.CreateItem("more_button", '[ + ' . hidden_count . ' more ]', "Function", {"layer": "usages"}) ], start_ln)
     let start_ln += 1
   endif
 
-  call self.AddLineAt([ self.CreateItem("text", " ", 0, -1, "Comment", {"layer": "usages"}) ], start_ln)
+  call self.AddLineAt([ self.CreateItem("text", " ", "Comment", {"layer": "usages"}) ], start_ln)
 
   return v:true
 endfu
@@ -463,15 +494,15 @@ fu! s:InternalBuffer.RenderUi() dict abort
   " clear items before render
   let self.items = []
 
-  call self.AddLine([ self.CreateItem("text", "", 0, -1, "Comment") ])
+  call self.AddLine([ self.CreateItem("text", "", "Comment") ])
 
   call self.AddLine([
-    \self.CreateItem("text", ">", 0, 2, "Function"),
-    \self.CreateItem("text", self.keyword, 1, -1, "Identifier"),
-    \self.CreateItem("text", "definitions", 1, -1, "Function"),
+    \self.CreateItem("text", ">", "Function"),
+    \self.CreateItem("text", self.keyword, "Identifier"),
+    \self.CreateItem("text", "definitions", "Function"),
     \])
 
-  call self.AddLine([ self.CreateItem("text", "", 0, -1, "Comment") ])
+  call self.AddLine([ self.CreateItem("text", "", "Comment") ])
 
   " draw grep results
   let idx          = 0
@@ -511,8 +542,8 @@ fu! s:InternalBuffer.RenderUi() dict abort
             \"group_header": v:true,
             \}
 
-      let prefix     = self.CreateItem("link", ">", 0, -1, "Comment", opts)
-      let group_name = self.CreateItem("link", path, 1, -1, "Function", opts)
+      let prefix     = self.CreateItem("link", ">", "Comment", opts)
+      let group_name = self.CreateItem("link", path, "Function", opts)
       let line       = [ prefix, group_name ]
 
       call self.AddLine(line)
@@ -525,7 +556,7 @@ fu! s:InternalBuffer.RenderUi() dict abort
       endfor
 
       if path_idx != len(keys(render_map)) - 1
-         call self.AddLine([ self.CreateItem("text", "", 0, -1, "Comment") ])
+         call self.AddLine([ self.CreateItem("text", "", "Comment") ])
       endif
 
       let path_idx += 1
@@ -546,29 +577,29 @@ fu! s:InternalBuffer.RenderUi() dict abort
   endif
 
   if len(self.definitions_grep_results) == 0
-    call self.AddLine([ self.CreateItem("text", "No definitions results", 0, -1, "Comment") ])
+    call self.AddLine([ self.CreateItem("text", "No definitions results", "Comment") ])
   endif
 
   if hidden_count > 0
-    call self.AddLine([ self.CreateItem("text", "", 0, -1, "Comment") ])
-    call self.AddLine([ self.CreateItem("more_button", '[ + ' . hidden_count . ' more ]', 0, -1, "Function") ])
+    call self.AddLine([ self.CreateItem("text", "", "Comment") ])
+    call self.AddLine([ self.CreateItem("more_button", '[ + ' . hidden_count . ' more ]', "Function") ])
   endif
 
-  call self.AddLine([ self.CreateItem("text", "", 0, -1, "Comment") ])
+  call self.AddLine([ self.CreateItem("text", "", "Comment") ])
 
   if self.usages_opened && len(self.usages_grep_results) > 0
     let current_ln = self.len()
     call self.RenderUiUsagesList(self.usages_grep_results, self.len())
   endif
 
-  call self.AddLine([ self.CreateItem("help_link", "> Help", 0, -1, "Function") ])
+  call self.AddLine([ self.CreateItem("help_link", "> Help", "Function") ])
 
-  call self.AddLine([ self.CreateItem("help_text", "", 0, -1, "Comment") ])
-  call self.AddLine([ self.CreateItem("help_text", "[enter/o] open file   [tab/p] preview file   [esc/q] close ", 0, -1, "Comment") ])
-  call self.AddLine([ self.CreateItem("help_text", "[t] toggle grouping   [a] show all results   [b] back to first result in list", 0, -1, "Comment") ])
-  call self.AddLine([ self.CreateItem("help_text", "[u] show usages", 0, -1, "Comment") ])
-  " call self.AddLine([ self.CreateItem("help_text", "", 0, -1, "Comment") ])
-  " call self.AddLine([ self.CreateItem("button", "[s] save search   [S] clean search   [N] next saved   [P] previous saved", 0, -1, "Identifier") ])
+  call self.AddLine([ self.CreateItem("help_text", "", "Comment") ])
+  call self.AddLine([ self.CreateItem("help_text", "[enter/o] open file   [tab/p] preview file   [esc/q] close ", "Comment") ])
+  call self.AddLine([ self.CreateItem("help_text", "[t] toggle grouping   [a] show all results   [b] back to first result in list", "Comment") ])
+  call self.AddLine([ self.CreateItem("help_text", "[u] show usages", "Comment") ])
+  " call self.AddLine([ self.CreateItem("help_text", "", "Comment") ])
+  " call self.AddLine([ self.CreateItem("button", "[s] save search   [S] clean search   [N] next saved   [P] previous saved", "Identifier") ])
 endfu
 
 fu! s:InternalBuffer.RemoveGarbagedLines() dict abort

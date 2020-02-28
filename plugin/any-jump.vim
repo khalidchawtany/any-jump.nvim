@@ -499,7 +499,7 @@ fu! g:AnyJumpHandlePreview(...) abort
       " TODO: move to func
       let render_ln = ui.GetItemLineNumber(action_item)
       for line in preview
-        let new_item = ui.CreateItem("preview_text", line, 0, -1, "Comment", { "link": action_item })
+        let new_item = ui.CreateItem("preview_text", line, "Comment", { "link": action_item })
         call ui.AddLineAt([ new_item ], render_ln)
 
         let render_ln += 1
