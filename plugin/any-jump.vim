@@ -114,19 +114,77 @@ fu! s:CreateNvimUi(internal_buffer) abort
   call nvim_open_win(buf, v:true, opts)
 
   let b:ui = a:internal_buffer
+
   let a:internal_buffer.vim_bufnr = buf
 
-  call b:ui.RenderUi()
-  call b:ui.JumpToFirstOfType('link', 'definitions')
+  call a:internal_buffer.RenderUi()
+  call a:internal_buffer.JumpToFirstOfType('link', 'definitions')
 endfu
 
 fu! s:CreateVimUi(internal_buffer) abort
-  let winid = popup_menu([], {"cursorline": 1, "minwidth": 100, "minheight": 20, "maxheight": 30, "border": [0,0,0,0], "padding": [0,1,1,1], "mapping": 1, "filtermode": 'n'})
+  let l:Filter   = function("s:VimPopupFilter")
+  let l:Callback = function("s:VimPopupCallback")
 
-  let b:ui = a:internal_buffer
-  let a:internal_buffer.vim_bufnr = winbufnr(winid)
+  let popup_winid = popup_menu([], {
+        \"cursorline": 1,
+        \"minwidth": 90,
+        \"minheight": 20,
+        \"maxheight": 30,
+        \"border": [0,0,0,0],
+        \"padding": [0,1,1,1],
+        \"mapping": 1,
+        \"filtermode": 'n',
+        \"filter": Filter,
+        \"callback": Callback,
+        \"firstline": 5,
+        \})
 
-  call b:ui.RenderUi()
+  let a:internal_buffer.vim_bufnr   = winbufnr(popup_winid)
+  let a:internal_buffer.popup_winid = popup_winid
+
+  " store internal buffer link inside popup window buffer
+  " for filter context primarly
+  call setbufvar(a:internal_buffer.vim_bufnr, "ui", a:internal_buffer)
+
+  call a:internal_buffer.RenderUi()
+endfu
+
+fu! s:VimPopupFilter(popup_winid, key) abort
+  if a:key == "j" || a:key == "k"
+    call popup_filter_menu(a:popup_winid, a:key)
+    " call popup_setoptions(b:popup_winid, {"moved": [10,10,10]})
+    return 1
+
+  elseif a:key == "p"
+    let buf = winbufnr(a:popup_winid)
+    let ib  = getbufvar(buf, 'ui')
+
+    if type(ib) == v:t_dict
+      call g:AnyJumpHandlePreview(ib)
+    else
+      echo "popup buffer not found for"
+    endif
+
+    return 1
+
+  elseif a:key == "\<CR>"
+    echo popup_getpos(a:popup_winid)
+    echo popup_getoptions(a:popup_winid)
+    call popup_filter_menu(a:popup_winid, a:key)
+    return 1
+
+  elseif a:key == "q"
+    call popup_close(a:popup_winid)
+    return 1
+  endif
+
+  " echo popup_getoptions(b:popup_winid)
+  " call popup_close(b:popup_winid)
+  return 0
+endfu
+
+fu! s:VimPopupCallback(id, result) abort
+  echo "id/result -> " . a:id . ' ' . string(a:result)
 endfu
 
 fu! s:Jump() abort
@@ -371,15 +429,23 @@ fu! g:AnyJumpToggleAllResults() abort
   call b:ui.TryRestoreCursorForItem(cursor_item)
 endfu
 
-fu! g:AnyJumpHandlePreview() abort
-  if !exists('b:ui')
-    return
+fu! g:AnyJumpHandlePreview(...) abort
+  if a:0 == 0
+    if exists('b:ui')
+      let ui = b:ui
+    else
+      return 1
+    endif
+  else
+    let ui = a:1
   endif
 
-  call b:ui.StartUiTransaction(bufnr())
+  call ui.StartUiTransaction(ui.vim_bufnr)
 
   let current_previewed_links = []
-  let action_item = b:ui.GetItemByPos()
+  let action_item = ui.GetItemByPos()
+
+  " echo "action item -> " . string(action_item)
 
   " dispatch to other items handler
   if type(action_item) == v:t_dict && action_item.type == 'more_button'
@@ -388,15 +454,15 @@ fu! g:AnyJumpHandlePreview() abort
   endif
 
   " remove all previews
-  if b:ui.preview_opened
+  if ui.preview_opened
     let idx            = 0
     let layer_start_ln = 0
 
-    for line in b:ui.items
+    for line in ui.items
       if line[0].type == 'preview_text'
         let line[0].gc = v:true " mark for destroy
 
-        let prev_line = b:ui.items[idx - 1]
+        let prev_line = ui.items[idx - 1]
 
         if type(prev_line[0]) == v:t_dict && prev_line[0].type == 'link'
           call add(current_previewed_links, prev_line[0])
@@ -407,7 +473,7 @@ fu! g:AnyJumpHandlePreview() abort
         endif
 
         " remove from ui
-        call deletebufline(bufnr(), layer_start_ln)
+        call deletebufline(ui.vim_bufnr, layer_start_ln)
 
       elseif line[0].type == 'help_link'
         " not implemeted
@@ -418,8 +484,8 @@ fu! g:AnyJumpHandlePreview() abort
       let idx += 1
     endfor
 
-    call b:ui.RemoveGarbagedLines()
-    let b:ui.preview_opened = v:false
+    call ui.RemoveGarbagedLines()
+    let ui.preview_opened = v:false
   end
 
   " if clicked on just opened preview
@@ -442,21 +508,21 @@ fu! g:AnyJumpHandlePreview() abort
       let preview = split(system(cmd), "\n")
 
       " TODO: move to func
-      let render_ln = b:ui.GetItemLineNumber(action_item)
+      let render_ln = ui.GetItemLineNumber(action_item)
       for line in preview
-        let new_item = b:ui.CreateItem("preview_text", line, 0, -1, "Comment", { "link": action_item })
-        call b:ui.AddLineAt([ new_item ], render_ln)
+        let new_item = ui.CreateItem("preview_text", line, 0, -1, "Comment", { "link": action_item })
+        call ui.AddLineAt([ new_item ], render_ln)
 
         let render_ln += 1
       endfor
 
-      let b:ui.preview_opened = v:true
+      let ui.preview_opened = v:true
     elseif action_item.type == 'help_link'
       echo "link text"
     endif
   endif
 
-  call b:ui.EndUiTransaction(bufnr())
+  call ui.EndUiTransaction(ui.vim_bufnr)
 endfu
 
 

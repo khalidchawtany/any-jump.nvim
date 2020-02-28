@@ -42,7 +42,6 @@ let s:InternalBuffer.MethodsList = [
 " Produce new Render Buffer
 fu! s:InternalBuffer.New() abort
   let object = {
-        \"vim_bufnr":                0,
         \"items":                    [],
         \"gc":                       v:false,
         \"preview_opened":           v:false,
@@ -51,6 +50,8 @@ fu! s:InternalBuffer.New() abort
         \"overmaxed_results_hidden": v:true,
         \"definitions_grep_results": [],
         \"usages_grep_results":      [],
+        \"vim_bufnr":                0,
+        \"popup_winid":              0,
         \}
 
   for method in self.MethodsList
@@ -157,13 +158,26 @@ endfu
 
 
 fu! s:InternalBuffer.GetItemByPos() dict abort
-  let idx = getbufinfo(self.vim_bufnr)[0]['lnum'] - 1
+  if s:nvim
+    let idx = getbufinfo(self.vim_bufnr)[0]['lnum'] - 1
+  else
+    " vim popup buffer doesn't have current line info inside getbufinfo()
+    " so extract line nr from win
+    let l:popup_pos = 0
+    call win_execute(self.popup_winid, 'let l:popup_pos = getcurpos()')
+    let idx = l:popup_pos[1] - 1
+  end
 
   if len(self.items) == idx
     return 0
   endif
 
-  let column = col('.')
+  if s:nvim
+    let column = col('.')
+  else
+    let column = 1
+  end
+
   let line   = self.items[idx]
 
   for item in line
@@ -278,10 +292,18 @@ fu! s:InternalBuffer.ClearBuffer(buf) dict abort
 endfu
 
 fu! s:InternalBuffer.StartUiTransaction(buf) dict abort
+  if !s:nvim
+    return
+  endif
+
   call setbufvar(a:buf, '&modifiable', 1)
 endfu
 
 fu! s:InternalBuffer.EndUiTransaction(buf) dict abort
+  if !s:nvim
+    return
+  endif
+
   call setbufvar(a:buf, '&modifiable', 0)
 endfu
 
