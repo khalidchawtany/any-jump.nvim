@@ -76,19 +76,25 @@ fu! s:InternalBuffer.RenderLine(items, line) dict abort
   let text        = base_prefix
   let hl_regions  = []
 
+  let idx = 0
+  let start_col = 1
+
   for item in a:items
     let prefix = ""
 
-    if item.start_col > 1
+    if idx > 0
       let prefix = " "
     endif
 
     let text = text . prefix . item.text
 
-    let hl_from = item.start_col
+    let hl_from = start_col
     let hl_to   = hl_from + len(prefix . item.text)
 
     call add(hl_regions, [item.hl_group, hl_from, hl_to, len(prefix . item.text)])
+
+    let start_col = hl_to
+    let idx += 1
   endfor
 
   call appendbufline(self.vim_bufnr, a:line, text)
@@ -103,7 +109,6 @@ fu! s:InternalBuffer.RenderLine(items, line) dict abort
             \region[1],
             \region[2])
     else
-      " echo string(a:line + 1) . ' ' . string(region[1])
       call prop_add(a:line + 1, region[1], {
             \'length': region[3],
             \'type': region[0],
