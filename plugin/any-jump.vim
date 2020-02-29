@@ -434,7 +434,7 @@ fu! g:AnyJumpHandlePreview(...) abort
   let current_previewed_links = []
   let action_item = ui.GetItemByPos()
 
-  " echo "action item -> " . string(action_item)
+  echo "action item -> " . string(action_item)
 
   " dispatch to other items handler
   if type(action_item) == v:t_dict && action_item.type == 'more_button'

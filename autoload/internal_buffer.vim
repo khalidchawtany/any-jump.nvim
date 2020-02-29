@@ -68,7 +68,7 @@ endfu
 
 fu! s:InternalBuffer.RenderLine(items, line) dict abort
   if s:nvim
-    let base_prefix = "\t"
+    let base_prefix = " "
   else
     let base_prefix = ""
   endif
@@ -120,13 +120,6 @@ endfu
 fu! s:InternalBuffer.AddLine(items) dict abort
   if type(a:items) == v:t_list
     let current_len = self.len()
-    let l:last_col = 1
-
-    for item in a:items
-      let item.start_col = l:last_col
-      let item.end_col   = l:last_col + item.len
-      let l:last_col     = item.end_col
-    endfor
 
     call self.RenderLine(a:items, current_len)
     call add(self.items, a:items)
@@ -141,14 +134,6 @@ endfu
 
 fu! s:InternalBuffer.AddLineAt(items, line_number) dict abort
   if type(a:items) == v:t_list
-    let last_col = 1
-
-    for item in a:items
-      let item.start_col = last_col
-      let item.end_col   = l:last_col + item.len
-      let last_col       = item.end_col
-    endfor
-
     call self.RenderLine(a:items, a:line_number)
     call insert(self.items, a:items, a:line_number)
 
@@ -206,6 +191,7 @@ fu! s:InternalBuffer.GetItemByPos() dict abort
   end
 
   if len(self.items) == idx
+    echo "line" . idx . ' -- ' . len(self.items)
     return 0
   endif
 
@@ -215,9 +201,10 @@ fu! s:InternalBuffer.GetItemByPos() dict abort
     let column = 1
   end
 
-  let line = self.items[idx]
+  let line = self.items[idx + 1]
 
   for item in line
+    throw "PLEASE SET START AND END COL WHILE RENDER FUNC"
     if item.start_col <= column && (item.end_col >= column || item.end_col == -1 )
       return item
     endif
@@ -370,7 +357,7 @@ fu! s:InternalBuffer.GrepResultToItems(gr, current_idx, layer) dict abort
 
   elseif g:any_jump_results_ui_style == 'filename_last'
     let path_text    = gr.path .  ":" . gr.line_number
-    let matched_text = self.CreateItem("link", " " . gr.text, "Statement", original_link_options)
+    let matched_text = self.CreateItem("link", "" . gr.text, "Statement", original_link_options)
     let file_path    = self.CreateItem("link", path_text, "String", options)
 
     let items = [ prefix, file_path, matched_text ]
